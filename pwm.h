@@ -116,9 +116,9 @@ class pwm_data
                     }
 
                     // Update next time stamps
-                    t_next_cmp_rise = t_next_zero + (cmp_rise) * cntr_prd;
+                    t_next_cmp_rise = t_next_zero + (double)(cmp_rise) * cntr_prd;
                     t_next_trigger_dead = t_next_zero + dead_time;
-                    t_next_zero = t_next_zero + (peak+1) * cntr_prd;
+                    t_next_zero = t_next_zero + (double)(peak+1) * cntr_prd;
                 }
                 
                 // ------------- t < tpeak ------------- //
@@ -153,20 +153,22 @@ class pwm_data
                     // ======== PUT CODE THAT RUNS ON VALLEY BELOW ========= //
                     cntrl_out_str *cntrl_out = cntrl_ptr->cascade_pid(indata);
 
-                    cmp_rise = (unsigned long long)((double)peak * cntrl_out->duty);
+                    cmp_rise = (unsigned long long)((double)(peak+1) * cntrl_out->duty);
                     cmp_fall = cmp_rise;
                     pwm_invert_logic = cntrl_out->invert_pol;
 
-                    // Switching event
-                    pwm_trigger = true;
+                    // Checks to see inversion logic
+                    if(pwm_invert_logic != pwm_invert_logic_n1){
+                        pwm_trigger = true;
+                        pwm_init = false;
+                        crossing = true;
+                    }
 
                     // Update next time stamps
-                    t_next_cmp_rise = t_next_zero + cmp_rise * cntr_prd;
-                    t_next_peak = t_next_zero + peak * cntr_prd;
-                    t_next_zero = t_next_zero + 2*peak * cntr_prd;
-                    t_next_cmp_fall = t_next_zero - cmp_fall * cntr_prd;
-                    max_step = peak*cntr_prd;
-
+                    t_next_cmp_rise = t_next_zero + (double)cmp_rise * cntr_prd;
+                    t_next_peak = t_next_zero + (double)peak * cntr_prd;
+                    t_next_cmp_fall = t_next_peak + (double)(peak - cmp_fall) * cntr_prd;
+                    t_next_zero = t_next_zero + 2 * (double)peak * cntr_prd;
                 }
 
                 // ------------- t < tpeak ------------- //
@@ -185,16 +187,29 @@ class pwm_data
                 // ------------- t >= tpeak ------------- //
                 else
                 {
-                    if(t_n1 < t_next_peak && *t >= t_next_peak)
-                    {
-                        pwm_trigger = true; // Not sure if needed here but gonna maintain it
-                    }
+                    //if(t_n1 < t_next_peak && *t >= t_next_peak)
+                    //{
+                    //    pwm_trigger = true; // Not sure if needed here but gonna maintain it
+                    //}
                     if(t_n1 < t_next_cmp_fall && *t >= t_next_cmp_fall)
                     {
                         pwm_trigger = true;
                         pwm_init = true;
+
+                        // Time-stamp for pwm with dead time
+                        t_next_trigger_dead = t_next_cmp_fall + dead_time;
                     }
                 }
+
+                // ------------- PWM after dead time ------------- //
+                if(t_n1 < t_next_trigger_dead && *t >= t_next_trigger_dead)
+                {
+                    pwm_trigger = true;
+                    pwm_dead = pwm_init;
+                    crossing = false;
+                }
+
+                /* UNCOMMENTING STUFF HERE
 
                 // ------------- dead time pwm switching events ------------- //
                 if(!pwm_init_n1 && pwm_init)
@@ -215,6 +230,7 @@ class pwm_data
                     pwm_trigger = true;
                     pwm_dead = pwm_init;
                 }
+                */
 
                 break;
         }
@@ -238,7 +254,6 @@ class pwm_data
         // Saves stuff for next iterations
         t_n1 = *t;
         pwm_invert_logic_n1 = pwm_invert_logic;
-
         pwm_high_n1 = pwm_high;
         pwm_low_n1 = pwm_low;
         pwm_init_n1 = pwm_init;
@@ -246,15 +261,30 @@ class pwm_data
 
     void pwm_trunc_handler(double *timestep, double t)
     {
-  
-        if(t < t_next_zero) if(*timestep > t_next_zero - t) *timestep = t_next_zero - t;
-        if(t < t_next_cmp_rise)   if(*timestep > t_next_cmp_rise - t)   *timestep = t_next_cmp_rise - t;
-        //if(t_n1 < t_next_peak)   if(*timestep > t_next_peak - t_n1)   *timestep = t_next_peak - t_n1;
-        //if(t_n1 < t_next_cmp_fall)   if(*timestep > t_next_cmp_fall - t_n1)   *timestep = t_next_cmp_fall - t_n1;
-        if(t < t_next_trigger_dead)   if(*timestep > t_next_trigger_dead - t)   *timestep = t_next_trigger_dead - t;  
-        //if(pwm_trigger) if(*timestep > ttol)    *timestep = ttol;      
-        //if(crossing) if(*timestep > ttol)   *timestep = ttol/4;
-        
+        switch(mode){
+            default:
+            case SAWTOOTH:
+                if(t < t_next_zero) if(*timestep > t_next_zero - t) *timestep = t_next_zero - t;
+                if(t < t_next_cmp_rise)   if(*timestep > t_next_cmp_rise - t)   *timestep = t_next_cmp_rise - t;
+                if(t < t_next_trigger_dead)   if(*timestep > t_next_trigger_dead - t)   *timestep = t_next_trigger_dead - t;  
+
+                break;
+
+            case TRIANGULAR:
+                if(t < t_next_cmp_rise){
+                    if(*timestep > t_next_cmp_rise - t)   *timestep = t_next_cmp_rise - t;
+                }
+                if(t < t_next_cmp_fall){
+                    if(*timestep > t_next_cmp_fall - t)   *timestep = t_next_cmp_fall - t;
+                }
+                if(t < t_next_zero){
+                    if(*timestep > t_next_zero - t)   *timestep = t_next_zero - t;
+                }
+
+                // Also checks and prioritizes the real switching event
+                if(t < t_next_trigger_dead) if(*timestep > t_next_trigger_dead - t)   *timestep = t_next_trigger_dead - t;  
+                break;
+        }        
     }
 
     double pwm_max_step_handler(double t)
@@ -273,7 +303,7 @@ class pwm_data
     }
 
     // --------------------- Constructor in .h file requires inline ---------------------- //
-    inline pwm_data(double fs = 40e3, double fclk = 200e6, double dt = 10e-9, \
+    inline pwm_data(double fs = 40e3, double fclk = 200e6, double dt = 50e-9, \
      CARRIER carr_mode = SAWTOOTH){
         
         // Initializes non-zero elements
@@ -311,18 +341,18 @@ class pwm_data
             t_next_trigger_dead = t_next_zero + dead_time;
             t_next_cmp_rise = t_next_zero + ((double)(cmp_rise)) * cntr_prd;
             t_next_peak = -1; // Not used, but could interfere in trunc
-            //t_next_zero = t_next_zero + peak * cntr_prd;
             t_next_cmp_fall = -1; // Not used, but could interfere in trunc
             break;
 
         case TRIANGULAR:
             // Initializes peak counter value
-            peak = (unsigned long long)round((fclk/fs)/2);
+            peak = (unsigned long long)floor((fclk/fs)/2);
             max_step = peak * cntr_prd;
             t_next_zero = dead_time/10;
-            t_next_cmp_rise = t_next_zero + cmp_rise * cntr_prd;
-            t_next_peak = t_next_zero + peak * cntr_prd;
-            t_next_cmp_fall = t_next_peak + (peak - cmp_fall) * cntr_prd;
+            t_next_trigger_dead = t_next_zero + dead_time;
+            t_next_cmp_rise = t_next_zero + ((double)cmp_rise) * cntr_prd;
+            t_next_peak = t_next_zero + ((double)peak) * cntr_prd;
+            t_next_cmp_fall = t_next_peak + (double)(peak - cmp_fall) * cntr_prd;
             break;
         }
     };

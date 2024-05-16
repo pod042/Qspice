@@ -376,7 +376,7 @@ extern "C" __declspec(dllexport) void digital_controller(
   Shigh = (double)(inst->pwm1.pwm_high);
   Slow = (double)(inst->pwm1.pwm_low);
   duty = inst->cntrl.cntrl_out.duty;
-  debug = inst->cntrl.vin_norm;
+  debug = (double)inst->cntrl.vin_norm;
   //debug = (double)inst->pwm1.trunc_flag;
   //LOGT("peak = %d", (int)inst->pwm1.peak);
 }
