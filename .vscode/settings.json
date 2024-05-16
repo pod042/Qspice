@@ -1,0 +1,10 @@
+{
+    "cmake.generator": "Unix Makefiles",
+    "files.associations": {
+        "*.bat": "bat",
+        "vector": "cpp",
+        "xstring": "cpp",
+        "xutility": "cpp",
+        "cmath": "cpp"
+    },
+}

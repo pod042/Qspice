@@ -1,0 +1,184 @@
+.subckt  TP65H070G4LSG 301 302 303
+* GROUP A: 301=D1, 302=G1, 303=S1
+*
+* NODE 000 - 099: RESERVED FOR CAP EMULATION
+* NODE 100 - 199: HEMT_A AND NMOS_A
+* NODE 300 - 399: PIN AND CONNECTION
+*
+* Part A: 101=drain A, 152=gate A, 199=source A  
+* HEMT_A: 101=drainHA, 102=gateHA, 103=sourceHA
+* NMOS_A: 151=drainMA, 152=gateMA, 153=sourceMA
+*
+*   ver 0.1, MAR 15, 2018, By Feng Qi @ Transphorm
+*   Modified, Aug 1, 2019, by Ken Shono
+*   ver 0.3, Jan 07, 2021, By Ken Shono @ Transphorm
+*       Fixed anomalous Idss at high temperature
+*       Fixed temperature dependence of Rds(on) 
+************************
+************************
+***   Part A Begin   ***
+************************
+* 101=drain A, 152=gate A, 153=source A
+ 
+**************************
+**  Connection A Begin  **
+
+** Connection between HEMT_Source and LVMOS_Drain
+Li1A 103 151 0.01nH
+** Bonding wires betwen HEMT_Gate and LVMOS_Source
+Li2A 102 198 1.476nH 
+Ri2A 102 198 20 
+Ri3A 198 303 55.544m   
+Li2B 102 199 1.479nH 
+Ri2B 102 199 20 
+Ri3B 199 303 54.796m tc=0.009
+
+ 
+**  Connection A End  **
+************************
+ 
+ 
+******************* 
+**  HEMT_A Begin **
+* xxxx
+* 101=drainHA, 102=gateHA, 103=sourceHA
+ 
+ 
+** HEMT_A Body  **
+ 
+J1A 104 102 103 MJ1A 2.52
+.model MJ1A NJF vto -22 beta 1.09 lambda 0.005 rs 0.008
++ cgs 30PF cgd 3.5PF is=1f m=0.3 BetaTce=-1.3
+ 
+J2A 105 102 104 MJ2A 2.52
+.model MJ2A NJF vto -75 beta 1.09 lambda 0.005 
++ cgs 20PF cgd 35PF is=1f m=0.35 BetaTce=-1.3
+ 
+J3A 101 102 105 MJ3A 2.52
+.model MJ3A NJF vto -210 beta 1.09 lambda 0.005 rd 0.08
++ cgs 10PF cgd 350PF is=1f m=0.4 BetaTce=-1.3
+ 
+ 
+**  HEMT_A Leakage Compensation  **
+*DL1A 106 101 MDLA 2.52
+*DL2A 106 103 MDLA 2.52
+.model MDLA D is=0.05uA cjo=0
+ 
+ 
+**  HEMT_A Cap Compensation  **
+ 
+CJA 101 103 15pF
+ 
+ 
+**  HEMT_A End  **
+******************
+ 
+ 
+********************
+**  NMOS_A Begin  **
+* xxxx
+* 151=drainMA, 152=gateMA, 153=sourceMA
+ 
+MA 159 157 158 158 MMA L=100u W=100u
+.MODEL MMA NMOS LEVEL=1 IS=1e-32
++VTO=4 LAMBDA=0.0160408 KP=28
++CGSO=7e-06 CGDO=2.5e-07
+
+
+DM1A 153 151 MDMA
+.MODEL MDMA D IS=7.67441e-12 RS=0.00290583 N=1.08487 BV=30
++IBV=0.00025 EG=1.09 XTI=1 TT=5e-09
++CJO=3.36029e-10 VJ=3.01187 M=0.612537 FC=0.1
+
+RMA  153 151 1e+07
+RMDA 159 151 0.0001
+RMGA 152 157 6
+RMSA 158 153 0.00271597
+
+
+RMLA 155 160 1
+FM2A 157 159 VM2A -1
+VM2A 154 0 0
+EMA  160 0 159 157 1
+CMA  161 160 4.11126e-10
+FM1A 157 159 VM1A -1
+VM1A 161 156 0
+RMCA 156 160 1
+
+DM2A 154 155 MDM1A
+.MODEL MDM1A D IS=1e-32 N=50
++CJO=1.93547e-10 VJ=0.793414 M=0.3 FC=1e-08
+
+DM3A 0 155 MDM2A
+.MODEL MDM2A D IS=1e-10 N=0.4 RS=3e-06
+
+DM4A 0 156 MDM3A
+.MODEL MDM3A D IS=1e-10 N=0.4
+ 
+**  NMOS_A End  **
+******************
+ 
+**  PartA Cap Compensation  **
+
+CGDA 152 101 9pF
+ 
+*********************
+***   PartA End   ***
+*********************
+*********************
+ 
+ 
+ 
+********************************
+********************************
+***   Pin Connection Begin   ***
+********************************
+ 
+ 
+********************
+**  301=D1 Begin  **
+* from 101=drainA to 301=D1
+  
+** Drain wire model was simplified
+L315 301 311 0.984n
+R315 301 311 20 
+R311 311 101 10.925m tc=0.009
+ 
+**  301=D1 End  **
+******************
+ 	
+ 
+********************
+**  302=G1 Begin  **
+* from 152=GateA to 302=G1
+ 
+** Gate wire model was simplified
+L325 302 321 6.023n
+R325 302 321 200 
+R324 321 152 194.714m
+ 
+**  302=G1 End  **
+******************
+ 
+ 
+********************
+**  303=S1 Begin  **
+* from 153=HEMT source to 303=S1
+ 
+** Source wire model was simplified
+R335 303 331 9.368m tc=0.009
+R331 331 153 20
+L331 331 153 0.788n
+ 
+**  303=S1 End  **
+******************
+ 
+ 
+ 
+******************************
+***   Pin Connection End   ***
+******************************
+******************************
+ 
+ 
+.ends  TP65H070G4LSG
