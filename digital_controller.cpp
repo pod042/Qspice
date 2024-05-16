@@ -74,27 +74,39 @@ class control
   public:
 
   // General
-  double fs;
-  double duty_max_ss;
+  double fs; // Switching freq. [for integrator]
+  double duty_max_ss; // Max duty in soft start
 
   // Some signals
   double vref;
   double vline_sense;
   double vin_norm;
-  double vin_norm_n1;
   double vo_sense;
   double ilb_sense;
 
   // Current controller parameters
-  double kpi;
-  double kii;
+  double kn0_i;
+  double kn1_i;
+  double kn2_i;
+  double kd1_i;
+  double kd2_i;
+
+  // Past values
   double ei_n1;
+  double ei_n2;
   double ui_n1;
+  double ui_n2;
 
   // Voltage controller parameters
-  double kpv;
-  double kiv;
+  double kn0_v;
+  double kn1_v;
+  double kn2_v;
+  double kd1_v;
+  double kd2_v;
+
+  // Past values
   double ev_n1;
+  double ev_n2;
   double uv_n1;
   double uv_n2;
 
@@ -179,12 +191,14 @@ class control
     // Classic PFC cascade control
     double v_error = vref - vo_sense;
     //double u_v = uv_n1 + kpv*v_error + kiv*ev_n1;
-    double u_v = 1.9904*uv_n1 - 0.9904*uv_n2 + 0.0030802*v_error - 0.0030802*0.9988*ev_n1;
+    double u_v = - kd1_v*uv_n1 - kd2_v*uv_n2 + kn0_v*v_error + kn1_v*ev_n1 + kn2_v*ev_n2;
 
+    // Max current reference is 3A (gets multiplied by sensor dc gain)
     if(u_v >= 0.3)  u_v = 0.3;
     if(u_v < 0) u_v = 0;
 
     // store [n-1] sampling
+    ev_n2  = ev_n1;
     ev_n1  = v_error;
     uv_n2 = uv_n1;
     uv_n1 = u_v;
@@ -197,13 +211,13 @@ class control
     // Current loop
     double i_error = i_ref - fabs(ilb_sense);
     //double duty = ui_n1 + 5*i_error + (1-5)*ei_n1;
-    double duty = ui_n1 + kpi*i_error + kii*ei_n1;
+    double duty = - kd1_i*ui_n1 - kd2_i*ui_n2 + kn0_i*i_error + kn1_i*ei_n1 + kn2_i*ei_n2;
 
     // Min and max duty-values - no antiwindup as its after storage
 
     // --- Soft-start limiter of max duty --- //
     if(duty_max_ss < 0.9){
-      duty_max_ss += 0.9/(1*fs);     // Requires 0,2 seconds to achieve max value
+      duty_max_ss += 0.9/(1*fs);     // Requires 1 second to achieve max value
     }
 
     // Duty-cycle limiter
@@ -211,12 +225,14 @@ class control
     if(duty < 0)  duty = 0;
 
     // store [n-1] sampling
-    ei_n1  = i_error;
+    ei_n2 = ei_n1;
+    ei_n1 = i_error;
+    ui_n2 = ui_n1;
     ui_n1 = duty;
-    vin_norm_n1 = vin_norm;
 
+    // Updates output structure
     cntrl_out.duty = duty;
-    //cntrl_out.duty = 0.3;
+
     if(vin_norm >= 0){
       cntrl_out.invert_pol = true;
     }
@@ -229,51 +245,31 @@ class control
   };
 
   // Constructor
-  control(double kpi_arg = 1, double kii_arg = 1, double kpv_arg = 1, \
-  double kiv_arg = 1, double fs_arg = 40e3, double fline = 60){
+  control(double kn0_i_arg = 1, double kn1_i_arg = 1, double kn2_i_arg = 1, \
+  double kd1_i_arg = 1, double kd2_i_arg = 1, double kn0_v_arg = 1,  \
+  double kn1_v_arg = 1, double kn2_v_arg = 1, double kd1_v_arg = 1, \
+  double kd2_v_arg = 1, double fs_arg = 40e3, double fline = 60){
 
     // General
     fs = fs_arg;
-    vin_norm = 0;
-    vin_norm_n1 = 0;
-    duty_max_ss = 0;
 
     // Current
-    kpi = kpi_arg;
-    kii = kii_arg;
+    kn0_i = kn0_i_arg;
+    kn1_i = kn1_i_arg;
+    kn2_i = kn2_i_arg;
+    kd1_i = kd1_i_arg;
+    kd2_i = kd2_i_arg;
 
-    // Voltage
-    kpv = kpv_arg;
-    kiv = kiv_arg;
-
-    // Control signals
-    ei_n1 = 0;
-    ui_n1 = 0;
-    ev_n1 = 0;
-    uv_n1 = 0;
-
-    // Other signals
-    vref = 0;
-    vline_sense = 0;
-    vo_sense = 0;
-    ilb_sense = 0;
+    // Current
+    kn0_v = kn0_v_arg;
+    kn1_v = kn1_v_arg;
+    kn2_v = kn2_v_arg;
+    kd1_v = kd1_v_arg;
+    kd2_v = kd2_v_arg;
 
     // PLL
     wn = 2*M_PI*fline;        // Nominal grid freq.
-    wg = 0;
-    theta = 0;     // PLL output angle
-    theta_n1 = 0;
-    vq = 0;
-    vq_n1 = 0;
-    vq_n2 = 0;
-    vq_n3 = 0;
-    ma_out = 0;
-    pll_count = 0;
     pll_count_max = (unsigned long long)round(fs_arg/(fline*2*4));
-
-    // Output structure
-    cntrl_out.duty = 0;
-    cntrl_out.invert_pol = false;
 
   }
 };
@@ -296,9 +292,11 @@ struct InstData {
 
   // Constructor to inialize non-zero members
   InstData(double fs, double fclk, double fline, double dt, CARRIER mode, \
-  double kpi, double kii, double kpv, double kiv) {
+  double kn0_i, double kn1_i, double kn2_i, double kd1_i, double kd2_i, \
+  double kn0_v, double kn1_v, double kn2_v, double kd1_v, double kd2_v) {
     this->pwm1 = * (new pwm_data(fs, fclk, dt, mode));
-    this->cntrl = * (new control(kpi, kii, kpv, kiv, fs, fline));
+    this->cntrl = * (new control(kn0_i, kn1_i, kn2_i, kd1_i, kd2_i, \
+    kn0_v, kn1_v, kn2_v, kd1_v, kd2_v, fs, fline));
   };
 
 };
@@ -315,17 +313,23 @@ struct InstData {
   double  fs           = data[ 4].d; /* input parameter */                    \
   double  fclk         = data[ 5].d; /* input parameter */                    \
   double  fline        = data[ 6].d; /* input parameter */                    \
-  double  kpi          = data[ 7].d; /* input parameter */                    \
-  double  kii          = data[ 8].d; /* input parameter */                    \
-  double  kpv          = data[ 9].d; /* input parameter */                    \
-  double  kiv          = data[10].d; /* input parameter */                    \
-  double  tdead        = data[11].d; /* input parameter */                    \
-  int    carrier_mode  = data[12].i; /* input parameter */                    \
-  int     sample_mode  = data[13].i; /* input parameter */                    \
-  double &duty         = data[14].d; /* input parameter */                    \
-  double &Shigh        = data[15].d; /* output */                             \
-  double &Slow         = data[16].d; /* output */                             \
-  double &debug        = data[17].d; /* output */
+  double  kn0_v        = data[ 7].d; /* input parameter */                    \
+  double  kn1_v        = data[ 8].d; /* input parameter */                    \
+  double  kn2_v        = data[ 9].d; /* input parameter */                    \
+  double  kd1_v        = data[10].d; /* input parameter */                    \
+  double  kd2_v        = data[11].d; /* input parameter */                    \
+  double  kn0_i        = data[12].d; /* input parameter */                    \
+  double  kn1_i        = data[13].d; /* input parameter */                    \
+  double  kn2_i        = data[14].d; /* input parameter */                    \
+  double  kd1_i        = data[15].d; /* input parameter */                    \
+  double  kd2_i        = data[16].d; /* input parameter */                    \
+  double  tdead        = data[17].d; /* input parameter */                    \
+  int    carrier_mode  = data[18].i; /* input parameter */                    \
+  int     sample_mode  = data[19].i; /* input parameter */                    \
+  double &duty         = data[20].d; /* input parameter */                    \
+  double &Shigh        = data[21].d; /* output */                             \
+  double &Slow         = data[22].d; /* output */                             \
+  double &debug        = data[23].d; /* output */
 
 
 
@@ -342,7 +346,7 @@ extern "C" __declspec(dllexport) void digital_controller(
   if (!inst) {
     // allocate instance data
     inst = *opaque = new InstData(fs, fclk, fline, tdead, (CARRIER)carrier_mode, \
-    kpi, kii, kpv, kiv);
+    kn0_i, kn1_i, kn2_i, kd1_i, kd2_i, kn0_v, kn1_v, kn2_v, kd1_v, kd2_v);
 
     if (!inst) {
       // terminate with prejudice
@@ -361,8 +365,14 @@ extern "C" __declspec(dllexport) void digital_controller(
   inputData indata = {v_ref, vline_sense, Vo_sense, IL_sense};
 
 
+  /* -------------------------------------------------------------------------- */
+  /*                              Runs pwm handler                              */
+  /* -------------------------------------------------------------------------- */
   inst->pwm1.pwm_gen(&t, &inst->cntrl, &indata);
-  //test(2, 3);
+
+  /* -------------------------------------------------------------------------- */
+  /*                               Updates outputs                              */
+  /* -------------------------------------------------------------------------- */
   Shigh = (double)(inst->pwm1.pwm_high);
   Slow = (double)(inst->pwm1.pwm_low);
   duty = inst->cntrl.cntrl_out.duty;
