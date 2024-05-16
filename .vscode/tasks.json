@@ -36,7 +36,10 @@
 			],
 			"options": {},
 			"problemMatcher": [],
-			"group": "build",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
 			"detail": "compiler: C:\\Program Files\\QSPICE\\dm\\bin\\dmc.exe"
 		},
 		{
