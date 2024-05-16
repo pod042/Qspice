@@ -15,7 +15,7 @@ I plan to organize this better later, but for now the file "digital_controller.c
 
 2. Adjust the triangular carrier mode
 
-- almost done, need to adjust zero crossing
+- done
 
 3. Implement sampling time options
     - One in valley (triangular and sawtooth)

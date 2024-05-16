@@ -160,8 +160,8 @@ class pwm_data
                     // Checks to see inversion logic
                     if(pwm_invert_logic != pwm_invert_logic_n1){
                         pwm_trigger = true;
-                        pwm_init = false;
                         crossing = true;
+                        t_next_trigger_dead = t_next_zero + dead_time;
                     }
 
                     // Update next time stamps
