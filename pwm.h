@@ -88,6 +88,7 @@ class pwm_data
     bool crossing;
     bool enable;                    // General enable for outputs
     bool trunc_flag;
+    bool sample_flag;
 
     CARRIER mode;
     SAMPLE_TIME instant;
@@ -105,6 +106,7 @@ class pwm_data
         pwm_trigger = false;
 
         // Calls sample handler
+        sample_flag = false;
         sampling_time_handler(t, cntrl_ptr, indata);
 
         // Depending of pwm mode:
@@ -297,6 +299,7 @@ class pwm_data
     void sampling_time_handler(double *t, class control *cntrl_ptr, inputData *indata)
     {
         if(t_n1 < t_next_sample && *t >= t_next_sample){
+            sample_flag = true; // Sets flag on
             cntrl_ptr->indata = *indata;
         }
     }

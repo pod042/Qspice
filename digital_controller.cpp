@@ -372,8 +372,8 @@ extern "C" __declspec(dllexport) void digital_controller(
   /* -------------------------------------------------------------------------- */
   Shigh = (double)(inst->pwm1.pwm_high);
   Slow = (double)(inst->pwm1.pwm_low);
-  duty = inst->cntrl.cntrl_out.duty;
-  debug = (double)inst->cntrl.indata.IL_sense;
+  duty = (double)inst->cntrl.cntrl_out.duty;
+  debug = (double)inst->pwm1.sample_flag;
 }
 
 
