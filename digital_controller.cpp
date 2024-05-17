@@ -188,7 +188,6 @@ class control
 
     // Classic PFC cascade control
     double v_error = vref - vo_sense;
-    //double u_v = uv_n1 + kpv*v_error + kiv*ev_n1;
     double u_v = - kd1_v*uv_n1 - kd2_v*uv_n2 + kn0_v*v_error + kn1_v*ev_n1 + kn2_v*ev_n2;
 
     // Max current reference is 3A (gets multiplied by sensor dc gain)
