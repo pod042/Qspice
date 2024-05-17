@@ -18,6 +18,4 @@ I plan to organize this better later, but for now the file "digital_controller.c
 - done
 
 3. Implement sampling time options
-    - One in valley (triangular and sawtooth)
-    - Another in middle of ascending carrier (triangular and sawtooth)
-    - And another in the middle of descending carrier (only triangular)
+- done

@@ -35,8 +35,8 @@
  *----------------------------------------------------------------------------*/
 // declare DbgLog instance for logging; instance name must be dbgLog; change
 // file name and max line limit if desired (-1 = max).
-#include "DbgLog.h"
-DbgLog dbgLog("@qdebug.log", 500);
+//#include "DbgLog.h"
+//DbgLog dbgLog("@qdebug.log", 500);
 
 
 /* -------------------------------------------------------------------------- */
@@ -74,15 +74,13 @@ class control
   public:
 
   // General
-  double fs; // Switching freq. [for integrator]
-  double duty_max_ss; // Max duty in soft start
+  double fs;                      // Switching freq. [for integrator]
+  double duty_max_ss;             // Max duty in soft start
 
-  // Some signals
-  double vref;
-  double vline_sense;
-  double vin_norm;
-  double vo_sense;
-  double ilb_sense;
+  // Input signals
+  inputData indata;               // Input data for controller
+  
+  double vin_norm;                // Tracked sine
 
   // Current controller parameters
   double kn0_i;
@@ -115,10 +113,10 @@ class control
 
   // PLL
   double wn;        // Nominal grid freq.
-  double wg;
-  double wg_n1;
+  double wg;        // Tracked freq.
+  double wg_n1;     // Past value of tracked freq.
   double theta;     // PLL output angle
-  double theta_n1;
+  double theta_n1;  // Past output angle
   double vq;
   double vq_n1;
   double vq_n2;
@@ -130,13 +128,13 @@ class control
   unsigned long long pll_count;
   unsigned long long pll_count_max;
 
-  /*
-    PLL function
-  */
+  /* -------------------------------------------------------------------------- */
+  /*                             Moving average PLL                             */
+  /* -------------------------------------------------------------------------- */
   void PLL_MA(){
 
     // MA only runs at 60*8 Hz - so requires decimation
-    double vin = vline_sense / VLINE_SENSE_MAX;    // normalizes vin
+    double vin = indata.vline_sense / VLINE_SENSE_MAX;    // normalizes vin
     pll_count++;
     if(pll_count >= pll_count_max){
 
@@ -173,16 +171,16 @@ class control
   }
 
 
-  /*
-    main control routine - called at every valley of carrier
-  */
-  cntrl_out_str* cascade_pid(inputData *data){
+  /* -------------------------------------------------------------------------- */
+  /*            Main control routine - called at every carrier valley           */
+  /* -------------------------------------------------------------------------- */
+  cntrl_out_str* cascade_pid(){
 
-    // Updates input data
-    vref = data->v_ref;
-    vo_sense = data->vo_sense;
-    ilb_sense = data->IL_sense;
-    vline_sense = data->vline_sense;
+    // Unpacks data for visualization
+    double vref = indata.v_ref;
+    double vo_sense = indata.vo_sense;
+    double ilb_sense = indata.IL_sense;
+    double vline_sense = indata.vline_sense;
 
     // ---- PLL with moving average ---- //
     // Decimation by 16.2e3 for sampling freq. of 480 Hz
@@ -204,13 +202,11 @@ class control
     uv_n1 = u_v;
 
     // Gain for sinusoidal reference
-    //double i_ref = u_v*fabs(vline_sense)/VLINE_SENSE_MAX;
     vin_norm = cos(theta);
     double i_ref = u_v*fabs(vin_norm);
 
     // Current loop
     double i_error = i_ref - fabs(ilb_sense);
-    //double duty = ui_n1 + 5*i_error + (1-5)*ei_n1;
     double duty = - kd1_i*ui_n1 - kd2_i*ui_n2 + kn0_i*i_error + kn1_i*ei_n1 + kn2_i*ei_n2;
 
     // Min and max duty-values - no antiwindup as its after storage
@@ -291,10 +287,11 @@ struct InstData {
   double t;
 
   // Constructor to inialize non-zero members
-  InstData(double fs, double fclk, double fline, double dt, CARRIER mode, \
+  InstData(
+  double fs, double fclk, double fline, double dt, CARRIER mode, SAMPLE_TIME instant, \
   double kn0_i, double kn1_i, double kn2_i, double kd1_i, double kd2_i, \
   double kn0_v, double kn1_v, double kn2_v, double kd1_v, double kd2_v) {
-    this->pwm1 = * (new pwm_data(fs, fclk, dt, mode));
+    this->pwm1 = * (new pwm_data(fs, fclk, dt, mode, instant));
     this->cntrl = * (new control(kn0_i, kn1_i, kn2_i, kd1_i, kd2_i, \
     kn0_v, kn1_v, kn2_v, kd1_v, kd2_v, fs, fline));
   };
@@ -345,7 +342,8 @@ extern "C" __declspec(dllexport) void digital_controller(
 
   if (!inst) {
     // allocate instance data
-    inst = *opaque = new InstData(fs, fclk, fline, tdead, (CARRIER)carrier_mode, \
+    inst = *opaque = new InstData(
+      fs, fclk, fline, tdead, (CARRIER)carrier_mode, (SAMPLE_TIME)sample_mode, \
     kn0_i, kn1_i, kn2_i, kd1_i, kd2_i, kn0_v, kn1_v, kn2_v, kd1_v, kd2_v);
 
     if (!inst) {
@@ -376,9 +374,7 @@ extern "C" __declspec(dllexport) void digital_controller(
   Shigh = (double)(inst->pwm1.pwm_high);
   Slow = (double)(inst->pwm1.pwm_low);
   duty = inst->cntrl.cntrl_out.duty;
-  debug = (double)inst->cntrl.vin_norm;
-  //debug = (double)inst->pwm1.trunc_flag;
-  //LOGT("peak = %d", (int)inst->pwm1.peak);
+  debug = (double)inst->cntrl.indata.IL_sense;
 }
 
 
